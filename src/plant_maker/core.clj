@@ -24,6 +24,8 @@
 (defn line-style [c]
   (style :foreground c :background c))
 
+(def gravity-radius 10)
+
 
 (def cnv (canvas :id :cnv :background "#FFF"
                  :size [750 :by 700]
@@ -47,7 +49,6 @@
 (defn distance [p1 p2]
   (let [diff (map - p1 p2)]
     (sqrt (transduce (map #(* % %)) + diff))))
-                 
 
 (defn find-root [f a b dx]
   (let [fa (f a)
@@ -91,6 +92,36 @@
   (repaint! cnv)
   (swap! model add-to-model newcomp))
 
+;; return distance and closest point from p to segment ab
+(defn gravity-vars [p a b]
+  (let [v (map - b a)
+        [xu yu :as u] (m/normalise v)
+        uperp [(- yu) xu]
+        delpa (map - p a)
+        da (m/dot u delpa)
+        db (m/dot u (map - b p))]
+    ;; (if (<= da 0)
+    ;;   (list (distance p a) a)
+    ;;   (if (<= db 0)
+    ;;     (list (distance p b) b)
+        (list (abs (m/dot uperp delpa)) (map + a (map #(* da %) u)))
+        ;; ))
+    ))
+        
+(defn best-gravity-vars [point]
+  (loop [[head & tail] @components
+         bestd 1000
+         bestp nil]
+    (if (nil? head)
+      (list bestd bestp)
+      (let [[dist pointprime] (gravity-vars point (:start head) (:end head))]
+        (if (< dist bestd)
+          (recur tail dist pointprime)
+          (recur tail bestd bestp))))))
+
+(defn apply-gravity [point]
+  (let [[d p] (best-gravity-vars point)]
+    (if (< d gravity-radius) p point)))
 
 (defn make-mouse-fun [& args]
   (let [prev (atom '())]
@@ -100,8 +131,9 @@
       ;;(println "prev = " @prev)
       (if (= e :reset)
         (reset! prev '())
-        (let [x (.getX e)
-              y (.getY e)]
+        (let [x0 (.getX e)
+              y0 (.getY e)
+              [x y] (apply-gravity [x0 y0])]
           (if (> (count @prev) 0)
             (case @mouse-mode
               :start (do
@@ -221,11 +253,20 @@
                                     :text "Next!"
                                     :listen [:action (fn [e]
                                                        (next-gen))])
+                            (button :id :restart
+                                    :text "Restart"
+                                    :listen [:action (fn [e]
+                                                       (reset! components
+                                                               (list {:stage :new
+                                                                      :start (:start @model)
+                                                                      :end (:end @model)}))
+                                                       (repaint! cnv))])
                             (button :id :clear
                                     :text "Clear"
                                     :listen [:action (fn [e]
                                                        (reset! components '())
                                                        (reset! model {:stage :new :start [0 0] :end [100 100] :components '()})
+                                                       (text! (select f [:#dimField]) "")
                                                        (reset! mouse-mode :start)
                                                        (repaint! cnv))])
                             (button :id :dimButt
