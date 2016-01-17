@@ -225,7 +225,7 @@
   
 
 (def f (frame :title "Plant Grower"
-              :on-close :exit
+              ;:on-close :exit
               ))
 
 (def controls
@@ -286,7 +286,7 @@
 
 (listen cnv :mouse-clicked mousefunction)
         
-(defn -main [& args]
+;(defn -main [& args]
   (-> f pack! show!)
-)
+;)
 
