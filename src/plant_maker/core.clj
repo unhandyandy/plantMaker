@@ -17,27 +17,37 @@
 ;; modes: start, mdeolOld, modelNew off
 (def mouse-mode (atom :start))
 
+;; the previous mouse-mode
 (def mouse-mode-prev (atom :start))
 
+;; the objects that will be drawn on the canvas
 (def components (atom '()))
 
+;; the recursor for a shoot
 (def model (atom {:start [0 0] :end [100 100] :components '()}))
 
-(def stalk-shoot (atom false))
+;;(def stalk-shoot (atom false))
 
+;; sets fg and bg to color c
 (defn line-style [c]
   (style :foreground c :background c))
 
-(def gravity-radius 24)
+;; sets radius of attraction for mouse
+(def gravity-radius 16)
 
+;; separation between grid points
 (def grid-radius (atom 180))
 
+;; size at which recursion stops
 (def resolution 6)
 
+;; calculate distance between points, specified as vectors of xy coordinates  
 (defn distance [p1 p2]
   (let [diff (map - p1 p2)]
     (sqrt (transduce (map #(* % %)) + diff))))
 
+;; draws arrow to indicate orientation at midtpoint of segment from a to b on
+;; graphics object g in color c
 (defn draw-arrow [a b g color]
   (if (> (distance a b) 100)
     (let [[xm ym :as m] (map round (map #(* 0.5 %) (map + a b)))
@@ -48,8 +58,10 @@
       (draw g (line xa1 ya1 xm ym) (line-style color))
       (draw g (line xa2 ya2 xm ym) (line-style color)))))
 
+;; create the canvas
 (def cnv (canvas :id :cnv :background "#FFF"
                  :size [750 :by 700]
+                 ;; called by (repaint! cnv)
                  :paint (fn [c g]
                           ;;(println "components = " @components)
                           (doseq [{s :stage [x1 y1] :start  [x2 y2] :end} @components]
@@ -63,17 +75,20 @@
                               (draw g (line x1 y1 x2 y2) (line-style col))
                               (if (= s :new)
                                 (draw-arrow [x1 y1] [x2 y2] g col))
+                              ;; draws grid points only defining recursor
                               (case @mouse-mode
                                 (:modelOld :modelNew :start)
                                 (if (= s :point)
                                   (draw g (circle x1 y1 2) (line-style col)))
                                 nil))))))
 
+;; a point is line segment in with equal endpoints
 (defn make-point [p]
   {:start p :end p :stage :point})
 
 (def sqrt3 (sqrt 3))
 
+;; make the points of a rectangular grid with separation d
 (defn make-grid-rect [d]
   (let [res (atom '())]
     (doseq [x (range 0 (.getWidth  cnv) d)
@@ -81,6 +96,7 @@
       (swap! res conj (make-point [x y])))
     @res))
 
+;; make the points of a hexagonal grid with separation d
 (defn make-grid-hex [d]
   (let [res (atom '())
         w (round (/ d 2))
@@ -93,8 +109,10 @@
       (swap! res conj (make-point [x y])))
     @res))
 
+;; call (grid-fun to generate grid points
 (def grid-fun (atom #(make-grid-rect @grid-radius)))
 
+;; toggle between rect and hex grids
 (def toggle-grid
   (let [pattern (atom :rect)]
     (fn [e]
@@ -106,6 +124,7 @@
           (reset! grid-fun #(make-grid-rect @grid-radius))
           (reset! pattern :rect))))))
 
+;; find a root of f(x) where a<x<b, accurate to dx
 (defn find-root [f a b dx]
   (let [fa (f a)
         fb (f b)
@@ -127,6 +146,8 @@
                  newlast
                  fn fnl))))))
 
+;; returns a function of one variable which is zero
+;; when the argument is the correct dimension
 (defn make-dim-fun []
   (let [totd (distance (:start @model) (:end @model))]
     (fn [x]
@@ -135,13 +156,16 @@
           (let [power (if (= s :new) x 1)]
             (swap! powsum + (expt (distance p1 p2) power))))
         (- @powsum (expt totd x))))))
-            
+
+;; find approximate dimension of fractal
 (defn calcDim []
   (find-root (make-dim-fun) 1 2 0.001))
 
+;; add compnent c to model mod (atom)
 (defn add-to-model [mod c]
     (assoc mod :components (conj (:components mod) c)))
 
+;; add newcomp to components and the model (recursor)
 (defn add-comp-to-model [newcomp]
   ;;(println "Here!")
   (swap! components conj newcomp)
@@ -165,7 +189,8 @@
       (list (abs (m/dot uperp delpa)) (map + a (map #(* da %) u)))
       ;; ))
       )))
-        
+
+;; return best match of point to all existing components
 (defn best-gravity-vars [point]
   (loop [[head & tail] @components
          bestd 1000
@@ -177,6 +202,7 @@
           (recur tail dist pointprime)
           (recur tail bestd bestp))))))
 
+;; return gravtized point
 (defn apply-gravity [point]
   (let [[d p] (best-gravity-vars point)]
     (map round (if (< d gravity-radius) p point))))
@@ -189,20 +215,22 @@
 ;;   (config! cnv :listen [:mouse-clicked (make-mouse-fun)])
 ;;   (mousefunction :reset))
 
-(def rbs (list 
-          (radio :id :stalk-shoot-false
-                 :listen [:action (fn [e]
-                                    (reset! stalk-shoot false))]
-                  :text "False")
-           (radio :id :stalk-shoot-false
-                 :listen [:action (fn [e]
-                                    (reset! stalk-shoot true))]
-                  :text "True")))
+;; (def rbs (list 
+;;           (radio :id :stalk-shoot-false
+;;                  :listen [:action (fn [e]
+;;                                     (reset! stalk-shoot false))]
+;;                   :text "False")
+;;            (radio :id :stalk-shoot-false
+;;                  :listen [:action (fn [e]
+;;                                     (reset! stalk-shoot true))]
+;;                   :text "True")))
 
-(def radios (button-group))
+;;(def radios (button-group))
 
-(config! rbs :group radios)
+;;(config! rbs :group radios)
 
+;; return a function of a point [x y] which is a similarity transform
+;; mapping vector [ma mb] to [a b]
 (defn make-transform [[ma mb] [a b]]
   (let [[x y :as m1] (vec (map - mb ma))
         m2 [(- y) x]
@@ -216,6 +244,8 @@
             outvec (m/mmul (m/matrix transin) tmat)]
         (vec (map + a outvec))))))
 
+;; apply transform fun to hash cmp,
+;; representing a line segment
 (defn apply-transform-to-map [fun cmp]
   (let [res (atom {})]
     (doseq [[k v] cmp]
@@ -225,9 +255,11 @@
                 v)))
     @res))
 
+;; apply transform to collection of line segments (as hashes)
 (defn apply-transform [func cmps]
   (map #(apply-transform-to-map func %) cmps))
 
+;; take the existing components collection and recur once
 (defn next-gen []
   (let [res (atom '())]
     (doseq [{s :stage a :start b :end :as c} @components]
@@ -245,6 +277,7 @@
     (reset! components @res)
     (repaint! cnv)))
 
+;; change the center of the image to the current point newcenter
 (defn recenter [newcenter]
   (let [fwidth (.getWidth  cnv)
         fheight (.getHeight cnv)
@@ -256,6 +289,7 @@
     (reset! mouse-mode @mouse-mode-prev)
     (repaint! cnv)))
 
+;; returns function to handle mouse clicks in canvas
 (defn make-mouse-fun [& args]
   (let [prev (atom '())]
     (fn [e]
@@ -300,13 +334,15 @@
           ;;(println "model: " @model)
           (repaint! cnv))))))
 
-
+;; global variable denoting mouse click handler
 (def mousefunction (make-mouse-fun))
 
+;; create the frame for the app
 (def f (frame :title "Plant Grower"
               ;:on-close :exit
               ))
 
+;; create slider used to adjust searation in grid
 (def grid-slider
   (slider :orientation :vertical
           :value 120
@@ -318,11 +354,14 @@
           :minor-tick-spacing 8))
 
 
+;; handler for grid-slider
 (listen grid-slider
         :change
         (fn [e]
           (reset! grid-radius (value grid-slider))))
 
+;; handler for estart button
+;; retains model but sets visisble components to initial shoot
 (defn restart-fun [e]
   (reset! components
           (list {:stage :new
@@ -330,15 +369,18 @@
                  :end (:end @model)}))
   (repaint! cnv))
 
+;; save the current model to a file
 (defn save-seed [e]
   (let [seedstr (prn-str @model)
         savefile (choose-file :type :save
                               ;;:filters ["Text" ["txt"]]
                               )]
+    ;; repaint in case save window corrupted canvas 
     (repaint! cnv)
     (if savefile
       (spit savefile seedstr))))
 
+;; load a model from a file
 (defn load-seed [e]
   (let [loadfile (choose-file :type :open)]
     (if loadfile
@@ -346,8 +388,12 @@
         (reset! model (clojure.edn/read-string seedstr))
         (restart-fun e)))))
 
+;; control-frame is the control panel
+;; control-frame refers to clear which refers to control-frame
+;; so must be declared now
 (declare control-frame)
 
+;; handler for clear button
 (defn clear [e]
   (reset! components (@grid-fun))
   (reset! model {:stage :new :start [0 0] :end [100 100] :components '()})
@@ -356,20 +402,24 @@
   (mousefunction :reset)
   (repaint! cnv))
 
+;; define control panel
 (def control-frame
   (frame :title "Controls"
          :content (vertical-panel
                    :items [;;(horizontal-panel :items (conj rbs
                            ;;                             (label "Stalk => Shoot?")))
                            ;;(label "   ")
+                           ;; set initial shoot
                            (button :id :setModel
                                    :text "Set Start"
                                    :listen [:action (fn [e]
                                                       (reset! mouse-mode :modelOld))])
+                           ;; set the stalks which are drawn but don't recurse
                            (button :id :setOld
                                    :text "Set Stalks"
                                    :listen [:action (fn [e]
                                                       (reset! mouse-mode :modelNew))])
+                           ;; set shoots  which are drawn green and recurse
                            (button :id :setNew
                                    :text "Set Shoots"
                                    :listen [:action (fn [e]
@@ -379,40 +429,52 @@
                                                                           (:old :new) true
                                                                           false) l)))
                                                       (reset! mouse-mode :off))])
+                           ;; recurse and draw
                            (button :id :newxtGen
                                    :text "Next!"
                                    :listen [:action (fn [e]
                                                       (next-gen))])
+                           ;; recenter the image
                            (button :id :recenterButt
                                    :text "Recenter"
                                    :listen [:action (fn [e]
                                                       (reset! mouse-mode-prev @mouse-mode)
                                                       (reset! mouse-mode :recenter))])
+                           ;; restart the construction from the initial shoot
+                           ;; retaining existing model
                            (button :id :restart
                                    :text "Restart"
                                    :listen [:action restart-fun])
+                           ;; calculate the dimension of the fractal
                            (button :id :dimButt
                                    :text "Dimension: "
                                    :listen [:action (fn [e]
                                                       (config! (select control-frame [:#dimField])
                                                                :text (str (calcDim))))])
+                           ;; field to display the dimension
                            (label :id :dimField
                                   :text ""
                                   ;;:editable? false
                                   ;;:multi-line? false
                                   :size [100 :by 30])
+                           ;; save button
                            (button :id :saveButt
                                    :text "Save Seed"
                                    :listen [:action save-seed])
+                           ;; spacer
                            (label :text ""
                                   :size [100 :by 30])
+                           ;; clears the image from the canvas
+                           ;; and resets the model to empty
                            (button :id :clear
                                    :text "Clear"
                                    :listen [:action clear])
+                           ;; toggles the grid shape
                            (button :id :setGrid
                                    :text "Toggle Grid"
                                    :listen [:action toggle-grid])
                            grid-slider
+                           ;; load seed from file
                            (button :id :loadButt
                                    :text "Load Seed"
                                    :listen [:action load-seed])
@@ -425,6 +487,7 @@
 ;;                                 :divider-location 120)
 ;;                        ))
 
+;; set the control-panel to always be on top of the canvas
 (.setAlwaysOnTop control-frame true)
 
 (config! f :content cnv)
