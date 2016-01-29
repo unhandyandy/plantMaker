@@ -153,8 +153,8 @@
     (fn [x]
       (let [powsum (atom 0)]
         (doseq [{s :stage p1 :start  p2 :end} (:components @model)]
-          (let [power (if (= s :new) x 1)]
-            (swap! powsum + (expt (distance p1 p2) power))))
+          (if (= s :new)
+            (swap! powsum + (expt (distance p1 p2) x))))
         (- @powsum (expt totd x))))))
 
 ;; find approximate dimension of fractal
